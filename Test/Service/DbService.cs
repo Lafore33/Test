@@ -120,7 +120,7 @@ public class DbService : IDbService
         cmd.Parameters.AddWithValue("@id", id);
 
         var result= await cmd.ExecuteScalarAsync();
-        return result == null;
+        return result != null;
     }
 
     public async Task<int> GetService(string name)
@@ -168,18 +168,20 @@ public class DbService : IDbService
                 cmd.Parameters.AddWithValue("@clientId", visit.ClientId);
                 cmd.Parameters.AddWithValue("@mechanic", mechanicId);
                 cmd.Parameters.AddWithValue("@date", DateTime.Now);
+                await cmd.ExecuteNonQueryAsync();
             }
             
             await using (var connection = new SqlConnection(_connectionString))
-            await using (var cmd = new SqlCommand("INSERT INTO Visit_Service VALUES (@visitId, @serviceId, @fee)", connection))
             {
-                await connection.OpenAsync();
                 for (int i = 0; i < ids.Count; i++)
                 {
-                    cmd.Parameters.AddWithValue("@visitId", visit.VisitId);
-                    cmd.Parameters.AddWithValue("@serviceId", ids[i]);
-                    cmd.Parameters.AddWithValue("@fee", visit.Services[i].ServiceFee);
-
+                    await using (var cmd = new SqlCommand("INSERT INTO Visit_Service VALUES (@visitId, @serviceId, @fee)", connection))
+                    {
+                        cmd.Parameters.AddWithValue("@visitId", visit.VisitId);
+                        cmd.Parameters.AddWithValue("@serviceId", ids[i]);
+                        cmd.Parameters.AddWithValue("@fee", visit.Services[i].ServiceFee);
+                        await cmd.ExecuteNonQueryAsync();
+                    }
                 }
             }
             return true;
