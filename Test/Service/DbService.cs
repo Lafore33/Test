@@ -4,6 +4,9 @@ using Test.Model;
 
 namespace Test.Service;
 
+public class NotFoundException(string message) : Exception(message);
+
+public class ConflictException(string message) : Exception(message);
 public class DbService : IDbService
 {
     private readonly IConfiguration _configuration;
@@ -15,7 +18,7 @@ public class DbService : IDbService
         _connectionString = _configuration.GetConnectionString("Default")!;
     }
 
-    private async Task<List<ServiceDTO>> getServices(int id)
+    private async Task<List<ServiceDTO>> GetServices(int id)
     {
         var command =
             """
@@ -45,7 +48,7 @@ public class DbService : IDbService
         return services;
         
     }
-    public async Task<VisitDTO> getVisit(int id)
+    public async Task<VisitDTO> GetVisit(int id)
     {
         var command = """
                             SELECT Visit.date as VDate, C.first_name AS CFName, C.last_name As CLName, C.date_of_birth As CDB,
@@ -83,9 +86,8 @@ public class DbService : IDbService
                 break;
             }
 
-            if (visit == null) throw new Exception("Visit is not found");
-            var services = await getServices(id);
-
+            if (visit == null) throw new NotFoundException("Visit is not found");
+            var services = await GetServices(id);
             visit.services = services;
             return visit;
         }
@@ -96,7 +98,7 @@ public class DbService : IDbService
 
     }
 
-    public async Task<int> getMechanicId(string license)
+    public async Task<int> GetMechanicId(string license)
     { 
         await using var connection = new SqlConnection(_connectionString);
         await using var cmd = new SqlCommand("SELECT mechanic_id from Mechanic WHERE licence_number = @license", connection);
@@ -139,29 +141,31 @@ public class DbService : IDbService
     
     
 
-    public async Task<bool> postVisit(InsertVisitDTO visit)
+    public async Task<bool> PostVisit(InsertVisitDTO visit)
     {
-        var mechanicId = await getMechanicId(visit.MechanicLicenseNumber);
-        if (mechanicId == -1) throw new Exception("Mechanic is not found");
+        var mechanicId = await GetMechanicId(visit.MechanicLicenseNumber);
+        if (mechanicId == -1) throw new NotFoundException("Mechanic is not found");
         var client = await DoesVisitorExists(visit.ClientId);
-        if (!client) throw new Exception("Client does not exist");
+        if (!client) throw new NotFoundException("Client does not exist");
         List<int> ids = [];
         foreach (ServiceDTO s in visit.Services)
         {
             var sid = await GetService(s.Name);
-            if (sid == -1) throw new Exception("Service is not found");
+            if (sid == -1) throw new NotFoundException("Service is not found");
             ids.Add(sid);
         }
+
         try
         {
-            var v = await getVisit(visit.VisitId);
-            throw new Exception("Visit does exist");
+            var v = await GetVisit(visit.VisitId);
+            throw new ConflictException("Visit does exist");
         }
-        catch (Exception e)
+        
+        catch (NotFoundException e)
         {
-            
             await using (var connection = new SqlConnection(_connectionString))
-            await using (var cmd = new SqlCommand("INSERT INTO Visit VALUES (@visitId, @clientId, @mechanic, @date)", connection))
+            await using (var cmd = new SqlCommand("INSERT INTO Visit VALUES (@visitId, @clientId, @mechanic, @date)",
+                             connection))
             {
                 await connection.OpenAsync();
                 cmd.Parameters.AddWithValue("@visitId", visit.VisitId);
@@ -170,12 +174,14 @@ public class DbService : IDbService
                 cmd.Parameters.AddWithValue("@date", DateTime.Now);
                 await cmd.ExecuteNonQueryAsync();
             }
-            
+
             await using (var connection = new SqlConnection(_connectionString))
             {
+                await connection.OpenAsync();
                 for (int i = 0; i < ids.Count; i++)
                 {
-                    await using (var cmd = new SqlCommand("INSERT INTO Visit_Service VALUES (@visitId, @serviceId, @fee)", connection))
+                    await using (var cmd = new SqlCommand(
+                                     "INSERT INTO Visit_Service VALUES (@visitId, @serviceId, @fee)", connection))
                     {
                         cmd.Parameters.AddWithValue("@visitId", visit.VisitId);
                         cmd.Parameters.AddWithValue("@serviceId", ids[i]);
@@ -184,6 +190,7 @@ public class DbService : IDbService
                     }
                 }
             }
+
             return true;
 
         }

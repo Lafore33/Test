@@ -4,6 +4,6 @@ namespace Test.Service;
 
 public interface IDbService
 {
-    Task<VisitDTO> getVisit(int id);
-    Task<bool> postVisit(InsertVisitDTO visit);
+    Task<VisitDTO> GetVisit(int id);
+    Task<bool> PostVisit(InsertVisitDTO visit);
 }

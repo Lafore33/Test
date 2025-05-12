@@ -17,34 +17,42 @@ public class VisitsController : ControllerBase
     }
 
     [HttpGet("{id}")]
-    public async Task<IActionResult> getVisits(int id)
+    public async Task<IActionResult> GetVisits(int id)
     {
         try
         {
-            var visit = await _dbService.getVisit(id);
+            var visit = await _dbService.GetVisit(id);
             return Ok(visit);
+        }
+        catch (NotFoundException e)
+        {
+            return NotFound(e.Message);
         }
         catch (Exception e)
         {
-            return BadRequest(e.Message);
+            return StatusCode(500, e.Message);
         }
     }
 
     [HttpPost]
     public async Task<IActionResult> PostVisit([FromBody] InsertVisitDTO visit)
     {
-        if (!ModelState.IsValid)
-        {
-            return BadRequest("Invalid input data");
-        }
         try
         {
-            var result = await _dbService.postVisit(visit);
-            return Ok(result);
+            await _dbService.PostVisit(visit);
+            return CreatedAtAction(nameof(PostVisit), new {id=visit.VisitId}, visit.VisitId);
+        }
+        catch (NotFoundException e)
+        {
+            return NotFound(e.Message);
+        }
+        catch (ConflictException e)
+        {
+            return Conflict(e.Message);
         }
         catch (Exception e)
         {
-            return BadRequest(e.Message);
+            return StatusCode(500, e.Message);
         }
         
     }
